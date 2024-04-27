@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT cfg as \"cfg: Value\" \n                    FROM BaseCfgs\n                    WHERE name = $1 and version = $2;",
+  "describe": {
+    "columns": [
+      {
+        "name": "cfg: Value",
+        "ordinal": 0,
+        "type_info": "Null"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0a4b345e7cd8659f9bee5d06b9f02891ab2434a3a00d5137a8be6dbc32470381"
+}
