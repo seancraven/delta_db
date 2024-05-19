@@ -43,4 +43,6 @@ sqlx = { version = "0.7.4", features = [
 tokio = { version = "1.37.0", features = ["full"] }
 pollster = "*"
 tracing = "*"
+tracing-subscriber = "*"
 pyo3 = { version = "0.21.2", features = ["anyhow"] }
+nucleo = "0.5.0"
