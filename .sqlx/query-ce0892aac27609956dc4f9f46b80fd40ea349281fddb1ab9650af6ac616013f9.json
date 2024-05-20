@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT cfg_hash FROM BaseCfgs WHERE name=$1 and version = $2;",
+  "describe": {
+    "columns": [
+      {
+        "name": "cfg_hash",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ce0892aac27609956dc4f9f46b80fd40ea349281fddb1ab9650af6ac616013f9"
+}
