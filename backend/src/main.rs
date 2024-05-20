@@ -1,8 +1,5 @@
-mod app;
-mod tui;
-
 use clap::{Parser, Subcommand};
-use delta_db::{read_file, Store};
+use delta_backend::{read_file, Store};
 use std::{
     env,
     path::{Path, PathBuf},

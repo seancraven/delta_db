@@ -1,5 +1,6 @@
+use anyhow::anyhow;
 use delta_backend::{read_file, Store};
-use pyo3::{pymethods, pymodule, Bound, PyModule, PyResult};
+use pyo3::{pyclass, pymethods, pymodule, types::PyModule, Bound, PyObject, PyResult};
 use std::path::PathBuf;
 #[pymodule]
 fn delta_db(m: &Bound<'_, PyModule>) -> PyResult<()> {
