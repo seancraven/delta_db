@@ -24,13 +24,18 @@ fn main() {
 fn construct_db_url() -> String {
     let path = match env::var("DELTA_DB_PATH") {
         Ok(p) => p,
-        Err(_) => env::var("HOME").unwrap(),
+        Err(_) => {
+            debug!("Couln't find env var $DELTA_DB_PATH, using $HOME.");
+            env::var("HOME").unwrap()
+        }
     };
+    debug!("Database path {}", &path);
     let mut path = PathBuf::from(path);
 
     if path.is_dir() && path.exists() {
         path = path.join("delta.db");
         if !path.exists() {
+            debug!("Creating new database file at {}", &path.display());
             std::fs::File::create(&path).expect("Creating database file failed unexpectedly");
         }
     }
@@ -47,10 +52,12 @@ fn run(args: Cli, url: &str) -> anyhow::Result<()> {
     let s = Store::new(url)?;
     match args.mode {
         Modes::Get { delta_id } => {
+            debug!("Mode get on {}", &delta_id);
             let config = s.get_delta(delta_id)?;
             println!("{}", serde_json::to_string(&config)?)
         }
         Modes::List => {
+            debug!("Mode list.");
             let configs = s.get_base_configs()?;
             println!("|{:^11}|{:^7}|", "Base Config", "Version");
             for cfg in configs {
@@ -67,6 +74,7 @@ fn run(args: Cli, url: &str) -> anyhow::Result<()> {
                 println!("{} {}", id, serde_json::to_string(&d)?);
             }
             if !interactive {
+                debug!("Non iteractive.");
                 return Ok(());
             }
         }

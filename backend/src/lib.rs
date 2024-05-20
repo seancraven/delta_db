@@ -7,7 +7,7 @@ use std::{
     path::Path,
 };
 use tokio::runtime::Runtime;
-use tracing::debug;
+use tracing::{debug, info, warn};
 
 pub fn read_file(path: impl AsRef<Path>) -> anyhow::Result<Value> {
     let path = path.as_ref();
@@ -67,6 +67,7 @@ impl Store {
             )
             .fetch_one(&self.pool),
         )?;
+        info!("Succesfully added base config");
         self.block_on(
             sqlx::query!(
                 r#"INSERT INTO Deltas (cfg_hash, delta) VALUES ($1, $2)"#,
@@ -237,6 +238,7 @@ impl Store {
         cfg_name: impl AsRef<str>,
         version: Option<u64>,
     ) -> anyhow::Result<Vec<(i64, Value)>> {
+        let cfg_name = cfg_name.as_ref();
         let base_config_hash = self
             .get_base_config_hash(cfg_name, version.map(|i| i as i64))?
             .to_string();
@@ -249,7 +251,13 @@ impl Store {
         );
         match query_result {
             Err(e) => match e {
-                sqlx::Error::RowNotFound => Ok(vec![]),
+                sqlx::Error::RowNotFound => {
+                    warn!(
+                        "No row was found cfg_name {}:{:?}, returning empty vec.",
+                        cfg_name, version,
+                    );
+                    Ok(vec![])
+                }
                 _ => Err(e).context("Querying deltas failed."),
             },
             Ok(vec) => Ok(vec.into_iter().map(|row| (row.id, row.delta)).collect()),
@@ -395,7 +403,6 @@ mod test_delta {
 
 #[cfg(test)]
 mod db_tests {
-    use std::{thread::sleep, time::Duration};
 
     use super::*;
     use serde_json::json;
