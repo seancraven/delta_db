@@ -1,0 +1,16 @@
+menu:
+  appetizers:
+    - name: Garlic Bread
+      price: 5.99
+    - name: Mozzarella Sticks
+      price: 7.99
+  main_courses:
+    - name: Spaghetti Bolognese
+      price: 12.99
+    - name: Grilled Salmon
+      price: 15.99
+  desserts:
+    - name: Tiramisu
+      price: 6.99
+    - name: Chocolate Cake
+      price: 5.99

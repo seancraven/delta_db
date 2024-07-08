@@ -1,0 +1,11 @@
+inventory:
+  - product_id: PRD001
+    name: Laptop
+    category: Electronics
+    price: 999.99
+    in_stock: 50
+  - product_id: PRD002
+    name: Desk Chair
+    category: Furniture
+    price: 199.99
+    in_stock: 30

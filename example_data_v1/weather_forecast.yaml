@@ -1,0 +1,14 @@
+weather_forecast:
+  city: London
+  country: UK
+  days:
+    - date: 2024-07-01
+      condition: Rainy
+      high_temp: 18
+      low_temp: 12
+      humidity: 80
+    - date: 2024-07-02
+      condition: Cloudy
+      high_temp: 20
+      low_temp: 14
+      humidity: 75

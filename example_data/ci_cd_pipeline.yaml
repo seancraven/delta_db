@@ -1,0 +1,16 @@
+pipeline:
+  stages:
+    - build
+    - test
+    - deploy
+  build:
+    script: 
+      - npm install
+      - npm run build
+  test:
+    script:
+      - npm run test
+  deploy:
+    script:
+      - docker build -t myapp .
+      - docker push myapp:latest

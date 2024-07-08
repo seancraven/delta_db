@@ -1,0 +1,8 @@
+app_name: CoolWebApp
+version: 2.1.3
+debug_mode: true
+database:
+  host: db.example.com
+  port: 3306
+  name: coolapp_prod
+  user: dbmaster

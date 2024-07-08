@@ -1,0 +1,10 @@
+tasks:
+  - name: Prepare presentation
+    priority: high
+    due_date: 2024-07-05
+  - name: Schedule team meeting
+    priority: medium
+    due_date: 2024-07-10
+  - name: Review project proposal
+    priority: high
+    due_date: 2024-07-15

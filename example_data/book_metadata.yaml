@@ -1,0 +1,12 @@
+book:
+  title: "The YAML Chronicles"
+  author: "Alex Writer"
+  isbn: "978-1234567890"
+  publication_date: 2024-01-15
+  genre:
+    - Science Fiction
+    - Technology
+  chapters:
+    - "The Beginning of Data"
+    - "YAML vs. The World"
+    - "Return of the Serialization"

@@ -1,0 +1,14 @@
+weather_forecast:
+  city: New York
+  country: USA
+  days:
+    - date: 2024-06-21
+      condition: Sunny
+      high_temp: 28
+      low_temp: 20
+      humidity: 45
+    - date: 2024-06-22
+      condition: Partly Cloudy
+      high_temp: 26
+      low_temp: 19
+      humidity: 50

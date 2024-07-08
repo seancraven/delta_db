@@ -1,0 +1,20 @@
+pipeline:
+  stages:
+    - lint
+    - build
+    - test
+    - deploy
+  lint:
+    script:
+      - eslint .
+  build:
+    script: 
+      - yarn install
+      - yarn build
+  test:
+    script:
+      - yarn test
+  deploy:
+    script:
+      - docker-compose up -d
+      - kubectl apply -f k8s-config.yaml

@@ -1,0 +1,16 @@
+menu:
+  starters:
+    - name: Caesar Salad
+      price: 8.99
+    - name: Tomato Soup
+      price: 6.99
+  main_dishes:
+    - name: Beef Burger
+      price: 14.99
+    - name: Vegetarian Pizza
+      price: 13.99
+  desserts:
+    - name: Apple Pie
+      price: 7.99
+    - name: Ice Cream Sundae
+      price: 6.99
