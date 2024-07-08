@@ -1,4 +1,4 @@
-pub mod matcher;
+mod matcher;
 pub mod tui;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use matcher::Matcher;
@@ -8,51 +8,71 @@ use ratatui::{
     text::{Line, Span, Text},
     widgets::{
         block::{Position, Title},
-        Block, Borders, Padding, Paragraph, Widget,
+        Block, BorderType, Borders, Padding, Paragraph, Widget,
     },
     Frame,
 };
-use std::{
-    fs::{read_to_string, File},
-    io::{self, Read, Result},
-};
-use tui::restore;
-fn main() -> Result<()> {
-    let mut t = tui::init()?;
-    let f = read_to_string("src/tui.rs")?
-        .lines()
-        .map(String::from)
-        .collect();
-    let mut a = App::new(f);
-    a.run(&mut t)?;
-    restore()?;
-    Ok(())
-}
-
-struct App {
+use serde_json::Value;
+use std::{collections::HashMap, io};
+pub struct App {
     input_box: InputTextbox,
     search_results: Resutlts,
-    layout: Layout,
+    display_base: DisplayBox,
+    display_delta: DisplayBox,
+    outer_layout: Layout,
+    inner_layout: Layout,
     matcher: Matcher,
+    configs: HashMap<String, String>,
 }
 impl App {
-    pub fn new(inital_search_values: Vec<String>) -> App {
+    pub fn get_search_result(&self) -> String {
+        self.configs
+            .get(self.search_results.r.last().unwrap_or(&String::from("")))
+            .unwrap_or(&String::from(""))
+            .clone()
+    }
+    pub fn new(deltas: Vec<(Value, Value)>, base_cfg: Value) -> App {
         let layout = layout::Layout::new(
             Direction::Vertical,
-            [Constraint::Percentage(100), Constraint::Min(3)],
+            vec![
+                Constraint::Percentage(50),
+                Constraint::Percentage(50),
+                Constraint::Min(3),
+            ],
+        );
+        let inner_layout = layout::Layout::new(
+            Direction::Horizontal,
+            vec![Constraint::Percentage(50), Constraint::Percentage(50)],
         );
         let input_box = InputTextbox::default();
         let search_results = Resutlts {
             r: vec![],
             column_matches: vec![],
         };
+        let mut configs = HashMap::new();
+        let mut initial_search_values = Vec::new();
+        let base_cfg = serde_yaml::to_string(&base_cfg).unwrap();
+        for (delta, full) in deltas {
+            let delta_string = serde_json::to_string(&delta).unwrap();
+            let full_string = serde_yaml::to_string(&full).unwrap();
+            initial_search_values.push(delta_string.clone());
+            configs.insert(delta_string, full_string);
+        }
         let mut matcher = Matcher::new();
-        matcher.add_new_strings(inital_search_values);
+        matcher.add_new_strings(initial_search_values);
         App {
-            layout,
+            outer_layout: layout,
             search_results,
+            inner_layout,
+            display_base: DisplayBox {
+                cfg_string: base_cfg,
+            },
+            display_delta: DisplayBox {
+                cfg_string: String::from(""),
+            },
             input_box,
             matcher,
+            configs,
         }
     }
     pub fn run(&mut self, terminal: &mut tui::Tui) -> io::Result<()> {
@@ -65,6 +85,11 @@ impl App {
                 columnt_results.push(column_);
             }
             self.search_results.r = string_results;
+            let delta = self
+                .configs
+                .get(self.search_results.r.last().unwrap_or(&String::from("")))
+                .unwrap();
+            self.display_delta.cfg_string = delta.clone();
             self.search_results.column_matches = columnt_results;
             terminal.draw(|frame| self.render_frame(frame))?;
             self.handle_events()?;
@@ -73,9 +98,12 @@ impl App {
         Ok(())
     }
     fn render_frame(&self, frame: &mut Frame) {
-        let l = self.layout.split(frame.size());
-        frame.render_widget(&self.search_results, l[0]);
-        frame.render_widget(&self.input_box, l[1]);
+        let l = self.outer_layout.split(frame.size());
+        let inner_l = self.inner_layout.split(l[0]);
+        frame.render_widget(&self.display_base, inner_l[0]);
+        frame.render_widget(&self.display_delta, inner_l[1]);
+        frame.render_widget(&self.search_results, l[1]);
+        frame.render_widget(&self.input_box, l[2]);
     }
 
     fn handle_events(&mut self) -> io::Result<()> {
@@ -92,6 +120,9 @@ impl App {
                 self.input_box.string.pop();
             }
             KeyCode::Esc => {
+                self.input_box.exit = true;
+            }
+            KeyCode::Enter => {
                 self.input_box.exit = true;
             }
             _ => (),
@@ -164,5 +195,20 @@ impl Resutlts {
                 })
                 .collect::<Vec<Span>>(),
         )
+    }
+}
+#[derive(Debug, Default)]
+struct DisplayBox {
+    cfg_string: String,
+}
+impl Widget for &DisplayBox {
+    fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
+    where
+        Self: Sized,
+    {
+        let base_block = Block::bordered().border_type(BorderType::Rounded);
+        Paragraph::new(self.cfg_string.as_str())
+            .block(base_block)
+            .render(area, buf);
     }
 }

@@ -1,5 +1,8 @@
+use anyhow::anyhow;
 use clap::{Parser, Subcommand};
-use delta_backend::{read_file, Store};
+use delta_backend::{build_cfg_from_base_and_delta, read_file, Store};
+use delta_tui::{self, App};
+use serde_json::Value;
 use std::{
     env,
     path::{Path, PathBuf},
@@ -15,11 +18,18 @@ fn main() {
     match run(args, &url) {
         Ok(()) => exit(0),
         Err(e) => {
-            eprintln!("{}", e);
-            eprintln!("This was caused by an inital error:\n{}", e.root_cause());
+            pretty_error_print(e);
             exit(1);
         }
     };
+}
+fn pretty_error_print(e: anyhow::Error) {
+    if e.to_string() == e.root_cause().to_string() {
+        eprintln!("{}", e)
+    } else {
+        eprintln!("{}", e);
+        eprintln!("This was caused by an inital error:\n{}", e.root_cause());
+    }
 }
 fn construct_db_url() -> String {
     let path = match env::var("DELTA_DB_PATH") {
@@ -59,9 +69,24 @@ fn run(args: Cli, url: &str) -> anyhow::Result<()> {
         Modes::List => {
             debug!("Mode list.");
             let configs = s.get_base_configs()?;
-            println!("|{:^11}|{:^7}|", "Base Config", "Version");
+            let max_len = configs
+                .iter()
+                .map(|(s, _)| s.chars().count())
+                .max()
+                .unwrap_or(11);
+            println!(
+                "|{baseconfig:^max_len$}|{version:^7}|",
+                baseconfig = "Base Config",
+                max_len = max_len,
+                version = "Version"
+            );
             for cfg in configs {
-                println!("|{:<11}|{:^7}|", cfg.0, cfg.1);
+                println!(
+                    "|{cfg_name:<max_len$}|{version:^7}|",
+                    cfg_name = cfg.0,
+                    max_len = max_len,
+                    version = cfg.1
+                );
             }
         }
         Modes::Search {
@@ -69,36 +94,78 @@ fn run(args: Cli, url: &str) -> anyhow::Result<()> {
             version,
             interactive,
         } => {
-            let ds = s.get_all_deltas(base_name, version.map(|i| i as u64))?;
-            for (id, d) in ds {
-                println!("{} {}", id, serde_json::to_string(&d)?);
+            let ds = s.get_all_deltas(base_name.clone(), version.map(|i| i as u64))?;
+            let mut string_deltas = vec![];
+            let mut jsons = Vec::new();
+            for (idx, json) in ds {
+                if let Ok(s_json) = serde_json::to_string(&json) {
+                    string_deltas.push(format!("{} : {}", idx, s_json));
+                    jsons.push(json);
+                }
             }
-            if !interactive {
-                debug!("Non iteractive.");
-                return Ok(());
+            match interactive {
+                false => {
+                    for row in string_deltas {
+                        println!("{}", row);
+                        return Ok(());
+                    }
+                }
+                true => {
+                    let mut t = delta_tui::tui::init()?;
+                    let base_config = s
+                        .get_base_config(base_name, version.map(|i| i as i64))?
+                        .unwrap_or(Value::Null);
+                    let full_configs = jsons
+                        .into_iter()
+                        .map(|d| {
+                            (
+                                d.clone(),
+                                build_cfg_from_base_and_delta(base_config.clone(), d),
+                            )
+                        })
+                        .collect();
+                    let mut a = App::new(full_configs, base_config);
+                    a.run(&mut t)?;
+                    delta_tui::tui::restore()?;
+                    println!("{}", a.get_search_result());
+                    return Ok(());
+                }
             }
         }
-        Modes::Add { path } => {
-            if !path.exists() {
-                eprintln!("{} doesn't exist!", path.display());
+        Modes::Add { paths } => {
+            let mut failure = false;
+            for path in paths {
+                match print_addition_result(&s, path.clone()) {
+                    Ok(()) => (),
+                    Err(e) => {
+                        eprintln!("{} Failed due to {}", path.display(), e);
+                        failure = true
+                    }
+                }
+            }
+            if failure {
                 exit(1);
             }
-            if !path.is_file() {
-                eprintln!("{} isn't a file!", path.display());
-                exit(1);
-            }
-            let Some(name) = fname_to_cfg_name(&path) else {
-                eprintln!(
-                    "Expected a valid path to a config file got: {}",
-                    &path.display()
-                );
-                exit(1);
-            };
-            let c = read_file(&path)?;
-            s.add_config(&name, c)?;
-            println!("Successuflly added config {}", name);
         }
     };
+    Ok(())
+}
+fn print_addition_result(s: &Store, path: PathBuf) -> anyhow::Result<()> {
+    if !path.exists() {
+        return Err(anyhow!("{} doesn't exist!", path.display()));
+    }
+    if !path.is_file() {
+        return Err(anyhow!("{} isn't a file!", path.display()));
+    }
+    let Some(name) = fname_to_cfg_name(&path) else {
+        return Err(anyhow!(
+            "Expected a valid path to a config file got: {}",
+            &path.display()
+        ));
+    };
+    let c = read_file(&path)?;
+    s.add_config(&name, c)?;
+    println!("Successuflly added config {}", name);
     Ok(())
 }
 fn fname_to_cfg_name(p: impl AsRef<Path>) -> Option<String> {
@@ -124,7 +191,7 @@ enum Modes {
         interactive: bool,
     },
     Add {
-        path: PathBuf,
+        paths: Vec<PathBuf>,
     },
     Get {
         delta_id: i64,

@@ -399,6 +399,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "delta_tui",
  "pollster",
  "serde",
  "serde_json",
@@ -407,6 +408,17 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "delta_tui"
+version = "0.1.0"
+dependencies = [
+ "crossterm",
+ "nucleo",
+ "ratatui",
+ "serde_json",
+ "serde_yaml",
 ]
 
 [[package]]
@@ -2007,15 +2019,6 @@ dependencies = [
  "thread_local",
  "tracing-core",
  "tracing-log",
-]
-
-[[package]]
-name = "tui"
-version = "0.1.0"
-dependencies = [
- "crossterm",
- "nucleo",
- "ratatui",
 ]
 
 [[package]]

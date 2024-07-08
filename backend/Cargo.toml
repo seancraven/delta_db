@@ -20,9 +20,9 @@ sqlx = { version = "0.7.4", features = [
   "json",
   "uuid",
   "chrono",
-
 ] }
 tokio = { version = "1.37.0", features = ["full"] }
 pollster = "*"
 tracing = "*"
 tracing-subscriber = "*"
+delta_tui = { path = "../tui/" }
