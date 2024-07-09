@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use delta_backend::{build_cfg_from_base_and_delta, read_file, Store};
-use delta_tui::{self, App};
+use delta_tui::{self, base_searcher::BaseSearch, App};
 use serde_json::Value;
 use std::{
     env,
@@ -60,7 +60,39 @@ fn construct_db_url() -> String {
 }
 fn run(args: Cli, url: &str) -> anyhow::Result<()> {
     let s = Store::new(url)?;
-    match args.mode {
+    let Some(mode) = args.mode else {
+        let cfgs = s.get_base_configs()?;
+        let mut joint = vec![];
+        for (cfg_names, v) in cfgs {
+            let json = s.get_base_config(&cfg_names, Some(v))?;
+            joint.push((cfg_names, v as usize, json.unwrap_or(Value::Null)));
+        }
+        let mut bs = BaseSearch::new(joint);
+        let mut t = delta_tui::tui::init()?;
+        bs.run(&mut t)?;
+        let (base_name, ver) = bs.get_search_results();
+        let base_config = s
+            .get_base_config(base_name.as_str(), Some(ver as i64))?
+            .unwrap_or(Value::Null);
+        let jsons = s.get_all_deltas(base_name.as_str(), Some(ver as u64))?;
+        let full_configs = jsons
+            .into_iter()
+            .map(|d| {
+                (
+                    d.1.clone(),
+                    build_cfg_from_base_and_delta(base_config.clone(), d.1),
+                )
+            })
+            .collect();
+        delta_tui::tui::restore()?;
+        let mut t = delta_tui::tui::init()?;
+        let mut a = App::new(full_configs, base_config);
+        a.run(&mut t)?;
+        delta_tui::tui::restore()?;
+        println!("{}", a.get_search_result());
+        return Ok(());
+    };
+    match mode {
         Modes::Get { delta_id } => {
             debug!("Mode get on {}", &delta_id);
             let config = s.get_delta(delta_id)?;
@@ -175,7 +207,7 @@ fn fname_to_cfg_name(p: impl AsRef<Path>) -> Option<String> {
 #[derive(Parser, Debug)]
 struct Cli {
     #[command(subcommand)]
-    mode: Modes,
+    mode: Option<Modes>,
 }
 
 #[derive(Debug, Clone, Subcommand)]

@@ -1,3 +1,4 @@
+pub mod base_searcher;
 mod matcher;
 pub mod tui;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
@@ -13,23 +14,43 @@ use ratatui::{
     Frame,
 };
 use serde_json::Value;
+use similar::ChangeTag;
 use std::{collections::HashMap, io};
 pub struct App {
     input_box: InputTextbox,
-    search_results: Resutlts,
+    search_results: Results,
     display_base: DisplayBox,
     display_delta: DisplayBox,
     outer_layout: Layout,
     inner_layout: Layout,
     matcher: Matcher,
-    configs: HashMap<String, String>,
+    configs: HashMap<String, (String, Vec<usize>)>,
 }
 impl App {
+    fn exit_status(&self) -> &ExitStatus {
+        &self.input_box.exit
+    }
+    fn get_best_result(&self) -> String {
+        match self.search_results.r.last() {
+            Some(res) => self
+                .configs
+                .get(res)
+                .cloned()
+                .map(|x| x.0)
+                .unwrap_or(String::from("")),
+            None => String::from(""),
+        }
+    }
+    fn get_result_to_hightlight(&self) -> Option<(String, Vec<usize>)> {
+        let res = self.search_results.r.last()?;
+        self.configs.get(res).cloned()
+    }
     pub fn get_search_result(&self) -> String {
-        self.configs
-            .get(self.search_results.r.last().unwrap_or(&String::from("")))
-            .unwrap_or(&String::from(""))
-            .clone()
+        match self.exit_status() {
+            ExitStatus::Quit => String::from(""),
+            ExitStatus::Finish => self.get_best_result(),
+            ExitStatus::NoExit => String::from(""),
+        }
     }
     pub fn new(deltas: Vec<(Value, Value)>, base_cfg: Value) -> App {
         let layout = layout::Layout::new(
@@ -45,38 +66,46 @@ impl App {
             vec![Constraint::Percentage(50), Constraint::Percentage(50)],
         );
         let input_box = InputTextbox::default();
-        let search_results = Resutlts {
+        let search_results = Results {
             r: vec![],
             column_matches: vec![],
         };
         let mut configs = HashMap::new();
         let mut initial_search_values = Vec::new();
         let base_cfg = serde_yaml::to_string(&base_cfg).unwrap();
+
         for (delta, full) in deltas {
             let delta_string = serde_json::to_string(&delta).unwrap();
             let full_string = serde_yaml::to_string(&full).unwrap();
+            let diff_line = diff_by_lines(&base_cfg, &full_string);
             initial_search_values.push(delta_string.clone());
-            configs.insert(delta_string, full_string);
+            configs.insert(delta_string, (full_string, diff_line));
         }
+
         let mut matcher = Matcher::new();
         matcher.add_new_strings(initial_search_values);
+
         App {
             outer_layout: layout,
-            search_results,
             inner_layout,
+            input_box,
+            search_results,
             display_base: DisplayBox {
                 cfg_string: base_cfg,
+                highlight_lines: Vec::new(),
+                title: String::from("Base Config"),
             },
             display_delta: DisplayBox {
                 cfg_string: String::from(""),
+                highlight_lines: Vec::new(),
+                title: String::from("Changed Config"),
             },
-            input_box,
             matcher,
             configs,
         }
     }
     pub fn run(&mut self, terminal: &mut tui::Tui) -> io::Result<()> {
-        while !self.input_box.exit {
+        while self.input_box.exit == ExitStatus::NoExit {
             self.matcher.tick();
             let mut string_results = vec![];
             let mut columnt_results = vec![];
@@ -85,12 +114,10 @@ impl App {
                 columnt_results.push(column_);
             }
             self.search_results.r = string_results;
-            let delta = self
-                .configs
-                .get(self.search_results.r.last().unwrap_or(&String::from("")))
-                .unwrap();
-            self.display_delta.cfg_string = delta.clone();
             self.search_results.column_matches = columnt_results;
+            let (string, highlighs) = self.get_result_to_hightlight().unwrap_or_default();
+            self.display_delta.cfg_string = string;
+            self.display_delta.highlight_lines = highlighs;
             terminal.draw(|frame| self.render_frame(frame))?;
             self.handle_events()?;
             self.matcher.add_target(self.input_box.string.as_str());
@@ -120,19 +147,26 @@ impl App {
                 self.input_box.string.pop();
             }
             KeyCode::Esc => {
-                self.input_box.exit = true;
+                self.input_box.exit = ExitStatus::Quit;
             }
             KeyCode::Enter => {
-                self.input_box.exit = true;
+                self.input_box.exit = ExitStatus::Finish;
             }
             _ => (),
         }
     }
 }
+#[derive(Default, Debug, PartialEq)]
+enum ExitStatus {
+    #[default]
+    NoExit,
+    Quit,
+    Finish,
+}
 #[derive(Default, Debug)]
 struct InputTextbox {
     string: String,
-    exit: bool,
+    exit: ExitStatus,
 }
 
 impl Widget for &InputTextbox {
@@ -141,7 +175,7 @@ impl Widget for &InputTextbox {
         Self: Sized,
     {
         let title = Title::from("Search for delta".bold());
-        let instructions = Title::from(Line::from(vec!["Quit".bold(), "<Esc>".bold()]));
+        let instructions = Title::from(Line::from(vec!["Quit<Esc> / Return <Enter>".bold()]));
         let block = Block::default()
             .title(title.alignment(Alignment::Center))
             .title(
@@ -161,11 +195,11 @@ impl Widget for &InputTextbox {
     }
 }
 #[derive(Debug, Default)]
-struct Resutlts {
+struct Results {
     r: Vec<String>,
     column_matches: Vec<Vec<u32>>,
 }
-impl Widget for &Resutlts {
+impl Widget for &Results {
     fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
     where
         Self: Sized,
@@ -185,8 +219,8 @@ impl Widget for &Resutlts {
         Paragraph::new(text_block).block(block).render(area, buf);
     }
 }
-impl Resutlts {
-    fn format_line(&self, l: &str, indecies: &Vec<u32>) -> Line {
+impl Results {
+    fn format_line(&self, l: &str, indecies: &[u32]) -> Line {
         Line::from(
             l.char_indices()
                 .map(|(i, c)| match indecies.contains(&(i as u32)) {
@@ -200,15 +234,53 @@ impl Resutlts {
 #[derive(Debug, Default)]
 struct DisplayBox {
     cfg_string: String,
+    highlight_lines: Vec<usize>,
+    title: String,
 }
 impl Widget for &DisplayBox {
     fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
     where
         Self: Sized,
     {
-        let base_block = Block::bordered().border_type(BorderType::Rounded);
-        Paragraph::new(self.cfg_string.as_str())
+        let base_block = Block::bordered().border_type(BorderType::Rounded).title(
+            Title::from(Span::from(&*self.title).style(Color::Green)).alignment(Alignment::Center),
+        );
+        let mut lines = Vec::new();
+        for (i, line) in self.cfg_string.lines().enumerate() {
+            if self.highlight_lines.contains(&i) {
+                lines.push(Line::from(line).cyan());
+            } else {
+                lines.push(Line::from(line).white());
+            }
+        }
+        Paragraph::new(Text::from_iter(lines))
             .block(base_block)
+            .alignment(Alignment::Left)
             .render(area, buf);
+    }
+}
+
+fn diff_by_lines(base_string: &str, other: &str) -> Vec<usize> {
+    let lines = similar::TextDiff::from_lines(base_string, other);
+    let mut out = vec![];
+    for change in lines.iter_all_changes() {
+        if change.tag() != ChangeTag::Equal {
+            if let Some(c) = change.old_index() {
+                out.push(c);
+            }
+        }
+    }
+    out
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_diff() {
+        let line_a = "a\nb\nc\n";
+        let line_b = "a\nc\nc\n";
+        let out = diff_by_lines(line_a, line_b);
+        assert_eq!(out, vec![1]);
     }
 }
