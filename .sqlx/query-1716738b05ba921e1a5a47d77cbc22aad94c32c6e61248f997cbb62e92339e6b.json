@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT cfg_hash FROM BaseCfgs WHERE name=$1 and version = $2;",
+  "query": "SELECT cfg_hash FROM BaseCfgs WHERE name=$1 and version=$2;",
   "describe": {
     "columns": [
       {
@@ -16,5 +16,5 @@
       false
     ]
   },
-  "hash": "ce0892aac27609956dc4f9f46b80fd40ea349281fddb1ab9650af6ac616013f9"
+  "hash": "1716738b05ba921e1a5a47d77cbc22aad94c32c6e61248f997cbb62e92339e6b"
 }
