@@ -1,0 +1,12 @@
+book:
+  title: "The AI Revolution"
+  author: "Dr. Sarah Tech"
+  isbn: "978-0987654321"
+  publication_date: 2024-09-01
+  genre:
+    - Non-fiction
+    - Technology
+  chapters:
+    - "The Rise of Machine Learning"
+    - "AI in Everyday Life"
+    - "The Future of Work"

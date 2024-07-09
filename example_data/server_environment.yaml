@@ -1,0 +1,14 @@
+environment:
+  name: production
+  servers:
+    - name: web-01
+      ip: 192.168.1.10
+      role: web
+    - name: db-01
+      ip: 192.168.1.11
+      role: database
+  firewall:
+    allowed_ports:
+      - 80
+      - 443
+      - 22

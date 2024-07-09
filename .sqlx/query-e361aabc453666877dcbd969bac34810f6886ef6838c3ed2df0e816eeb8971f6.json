@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT cfg_hash FROM BaseCfgs WHERE name=$1 and version=(SELECT MAX(version) from BaseCfgs WHERE name=$1);",
+  "describe": {
+    "columns": [
+      {
+        "name": "cfg_hash",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e361aabc453666877dcbd969bac34810f6886ef6838c3ed2df0e816eeb8971f6"
+}

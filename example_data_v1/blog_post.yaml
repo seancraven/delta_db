@@ -1,0 +1,14 @@
+post:
+  title: "10 Must-Know Python Tricks"
+  author: Bob Smith
+  date: 2024-08-15
+  tags:
+    - python
+    - coding tips
+  content: |
+    Python offers many powerful features that can make your code more efficient...
+  comments:
+    - user: coder42
+      text: This saved me hours of work!
+    - user: pythonista
+      text: Great post, looking forward to more.

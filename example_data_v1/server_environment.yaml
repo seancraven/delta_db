@@ -1,0 +1,14 @@
+environment:
+  name: staging
+  servers:
+    - name: app-server-01
+      ip: 10.0.1.5
+      role: application
+    - name: db-server-01
+      ip: 10.0.1.6
+      role: database
+  firewall:
+    allowed_ports:
+      - 8080
+      - 5432
+      - 22

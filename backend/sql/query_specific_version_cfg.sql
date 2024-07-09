@@ -1,7 +1,7 @@
-WITH TmpDelta(delta, created_at, cfg_hash) AS (
+WITH TmpDelta(delta, id, cfg_hash) AS (
     SELECT
         delta,
-        created_at,
+        id,
         cfg_hash
     FROM
         Deltas
@@ -21,9 +21,9 @@ SELECT
 FROM
     TmpDelta
 WHERE
-    created_at = (
+    id = (
         SELECT
-            MAX(created_at)
+            MAX(id)
         FROM
             TmpDelta
     );

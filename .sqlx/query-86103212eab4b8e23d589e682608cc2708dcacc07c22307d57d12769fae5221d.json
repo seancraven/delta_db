@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT Deltas.delta as \"delta: Value\", BaseCfgs.cfg as \"cfg: Value\" FROM Deltas \n                    INNER JOIN BaseCfgs on Deltas.cfg_hash = BaseCfgs.cfg_hash \n                    WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "delta: Value",
+        "ordinal": 0,
+        "type_info": "Null"
+      },
+      {
+        "name": "cfg: Value",
+        "ordinal": 1,
+        "type_info": "Null"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "86103212eab4b8e23d589e682608cc2708dcacc07c22307d57d12769fae5221d"
+}

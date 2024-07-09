@@ -1,0 +1,10 @@
+user:
+  id: 12345
+  name: John Doe
+  email: john.doe@example.com
+  preferences:
+    theme: dark
+    notifications: true
+  roles:
+    - user
+    - editor

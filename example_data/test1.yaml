@@ -1,0 +1,8 @@
+app_name: MyWebApp
+version: 1.0.0
+debug_mode: false
+database:
+  host: localhost
+  port: 5432
+  name: myapp_db
+  user: admin

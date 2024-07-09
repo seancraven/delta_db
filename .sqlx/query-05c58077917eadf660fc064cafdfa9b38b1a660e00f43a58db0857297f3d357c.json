@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "WITH TmpDelta(delta, id, cfg_hash) AS (\n    SELECT\n        delta,\n        id,\n        cfg_hash\n    FROM\n        Deltas\n    WHERE\n        cfg_hash = (\n            WITH HashVer(cfg_hash, version) AS (\n                SELECT\n                    cfg_hash,\n                    version\n                FROM\n                    BaseCfgs\n                WHERE\n                    name = $1\n            )\n            SELECT\n                cfg_hash\n            FROM\n                HashVer\n            WHERE\n                version = (\n                    SELECT\n                        MAX(version)\n                    FROM\n                        HashVer\n                )\n            LIMIT\n                1\n        )\n)\nSELECT\n    delta AS \"delta: Value\", cfg_hash\nFROM\n    TmpDelta\nWHERE\n    id = (\n        SELECT\n            MAX(id)\n        FROM\n            TmpDelta\n    );\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "delta: Value",
+        "ordinal": 0,
+        "type_info": "Null"
+      },
+      {
+        "name": "cfg_hash",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "05c58077917eadf660fc064cafdfa9b38b1a660e00f43a58db0857297f3d357c"
+}

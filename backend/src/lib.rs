@@ -1,80 +1,14 @@
-mod app;
-mod tui;
 use anyhow::{anyhow, Context};
-use pyo3::{pyclass, pymethods, pymodule, types::PyModule, Bound, PyObject, PyResult};
-use serde_json::{Map, Value};
+use serde_json::{to_string, Map, Value};
 use sqlx::{query_scalar, SqlitePool};
 use std::{
     future::Future,
     hash::{DefaultHasher, Hash, Hasher},
-    path::{Path, PathBuf},
+    path::Path,
 };
 use tokio::runtime::Runtime;
-use tracing::debug;
-
-#[pymodule]
-fn delta_db(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<ConfigStore>()?;
-    Ok(())
-}
-
-/// The config store class provides configuration storage and search.
-/// The configurations are stored in a sqlite database.
-///
-/// The config store stores config files, (yaml, yml and Json). If the file structure is changed,
-/// then the config's version is bumped.
-///
-/// The config store also stores all versions of the config, where just the filds of a config
-/// are changed, but not the values. These can be searched through using either the cli
-/// or the methods `get_deltas`
-///
-/// :param url (str): The sqlite url: sqlite::memory: for in memory storage,
-/// sqlite:///ablsoute/path/to/db/file
-/// sqlite://relative/path/to/db/file
-#[pyclass]
-pub struct ConfigStore {
-    s: Store,
-}
-#[pymethods]
-impl ConfigStore {
-    /// Construct a new config store, or connect to
-    /// an existing one at a given url.
-    #[new]
-    fn new(url: &str) -> PyResult<ConfigStore> {
-        let s = Store::new(url)?;
-        Ok(ConfigStore { s })
-    }
-
-    /// Add a new config by path.
-    fn add_config(&self, path: PathBuf) -> PyResult<()> {
-        if !(path.is_file() || path.is_symlink()) {
-            return Err(anyhow!("{} doesn't exist", path.display()).into());
-        }
-        let json = read_file(&path)?;
-        self.s
-            .add_config(path.clone().file_name().unwrap().to_str().unwrap(), json)?;
-        Ok(())
-    }
-    /// Get all base configurations and their available versions.
-    ///
-    /// :return configs list[tuple[str, int]]: List of configs
-    ///  as (name, version) tuples.
-    fn get_configs(&self) -> PyResult<Vec<(String, i64)>> {
-        Ok(self.s.get_base_configs()?)
-    }
-    /// Get all the configurations for a specific base config.
-    ///
-    /// :param name (str): Config's name
-    /// :param version (Optional[int]): Version of the config, if None get latest.
-    #[pyo3(signature = (name, version = None))]
-    fn get_deltas(&self, name: &str, version: Option<i64>) -> PyResult<()> {
-        todo!()
-    }
-    fn get_latest_config(&self, name: &str, version: Option<i64>) -> PyResult<Option<PyObject>> {
-        todo!();
-        // Ok(self.s.get_latest_config(name, version))?.map(|v| v.into());
-    }
-}
+use tracing::{debug, info, warn};
+use tracing_subscriber::fmt::format;
 
 pub fn read_file(path: impl AsRef<Path>) -> anyhow::Result<Value> {
     let path = path.as_ref();
@@ -82,16 +16,17 @@ pub fn read_file(path: impl AsRef<Path>) -> anyhow::Result<Value> {
         return Err(anyhow!("Path is unparseable {}", path.display()));
     };
     let f = std::fs::File::open(path)?;
-    match f_type
+    let f_ext = f_type
         .to_str()
-        .ok_or(anyhow!("Path is unparseable {}", path.display()))?
-    {
+        .ok_or(anyhow!("Path is unparseable {}", path.display()))?;
+    match f_ext {
         "yaml" => Ok(serde_yaml::from_reader(f).context("While opening .yaml an error occured.")?),
         "json" => Ok(serde_json::from_reader(f).context("While opening .json an error occured.")?),
         "yml" => Ok(serde_yaml::from_reader(f).context("While opening .yml an error occured.")?),
-        _ => Err(anyhow!(
-            "File extension is not one of 'yaml', 'json', 'yml'"
-        ))?,
+        _ => Err(anyhow!(format!(
+            "File extension {} is not one of 'yaml', 'json', 'yml'",
+            f_ext
+        )))?,
     }
 }
 pub struct Store {
@@ -134,6 +69,7 @@ impl Store {
             )
             .fetch_one(&self.pool),
         )?;
+        info!("Succesfully added base config");
         self.block_on(
             sqlx::query!(
                 r#"INSERT INTO Deltas (cfg_hash, delta) VALUES ($1, $2)"#,
@@ -149,7 +85,7 @@ impl Store {
         &self,
         cfg_name: impl AsRef<str>,
         version: Option<i64>,
-    ) -> anyhow::Result<Value> {
+    ) -> anyhow::Result<Option<Value>> {
         let ref_ = cfg_name.as_ref();
         match version {
             Some(v) => self
@@ -161,7 +97,7 @@ impl Store {
                         ref_,
                         v,
                     )
-                    .fetch_one(&self.pool),
+                    .fetch_optional(&self.pool),
                 )
                 .context(format!("Query fetching {}:{} failed", ref_, v)),
             None => self
@@ -174,7 +110,7 @@ impl Store {
                     );"#,
                         ref_,
                     )
-                    .fetch_one(&self.pool),
+                    .fetch_optional(&self.pool),
                 )
                 .context(format!("Query fetching {}:latest failed", ref_)),
         }
@@ -282,28 +218,56 @@ impl Store {
         cfg_name: impl AsRef<str>,
         version: Option<i64>,
     ) -> anyhow::Result<u64> {
+        debug!(
+            "Querying base_cfg: {} ver {}",
+            cfg_name.as_ref(),
+            version
+                .map(|i| format!("{}", i))
+                .unwrap_or("latest".to_string()),
+        );
         let cfg_name = cfg_name.as_ref();
         let string_hash = match version {
             Some(v) => self
                 .block_on(
                     sqlx::query_scalar!(
-                        r#"SELECT cfg_hash FROM BaseCfgs WHERE name=$1 and version = $2;"#,
+                        r#"SELECT cfg_hash FROM BaseCfgs WHERE name=$1 and version=$2;"#,
                         cfg_name,
                         v
                     )
-                    .fetch_one(&self.pool),
+                    .fetch_optional(&self.pool),
                 )?,
-            None => self.block_on(sqlx::query_scalar(
-                r#"SELECT cfg_hash FROM BaseCfgs WHERE name=$1 and version=(SELECT MAX(version) from BaseCfgs WHERE name= $1);"#,
-            ).fetch_one(&self.pool))?,
+            None => self.block_on(sqlx::query_scalar!(
+                r#"SELECT cfg_hash FROM BaseCfgs WHERE name=$1 and version=(SELECT MAX(version) from BaseCfgs WHERE name=$1);"#, cfg_name
+            ).fetch_optional(&self.pool))?,
         };
-        string_hash.parse().context("Failed to parse u64 hash")
+        match string_hash {
+            Some(h) => h.parse().context("Failed to parse u64 hash"),
+            None => {
+                let v = match version {
+                    Some(v) => format!("{}", v),
+                    None => String::from("latest"),
+                };
+                let all_bcfgs = self
+                    .get_base_configs()?
+                    .into_iter()
+                    .map(|(n, ver)| format!("{}:{}\n", n, ver))
+                    .reduce(|s, i| s + &i);
+                let msg = format!(
+                    "No config found with name {} and version {}\nAvailable Configs:\n{}",
+                    cfg_name,
+                    v,
+                    all_bcfgs.unwrap_or(String::from("No configs stored."))
+                );
+                Err(anyhow!(msg))
+            }
+        }
     }
     pub fn get_all_deltas(
         &self,
         cfg_name: impl AsRef<str>,
         version: Option<u64>,
     ) -> anyhow::Result<Vec<(i64, Value)>> {
+        let cfg_name = cfg_name.as_ref();
         let base_config_hash = self
             .get_base_config_hash(cfg_name, version.map(|i| i as i64))?
             .to_string();
@@ -316,7 +280,13 @@ impl Store {
         );
         match query_result {
             Err(e) => match e {
-                sqlx::Error::RowNotFound => Ok(vec![]),
+                sqlx::Error::RowNotFound => {
+                    warn!(
+                        "No row was found cfg_name {}:{:?}, returning empty vec.",
+                        cfg_name, version,
+                    );
+                    Ok(vec![])
+                }
                 _ => Err(e).context("Querying deltas failed."),
             },
             Ok(vec) => Ok(vec.into_iter().map(|row| (row.id, row.delta)).collect()),
@@ -336,7 +306,7 @@ impl Store {
         Ok(build_cfg_from_base_and_delta(base, delta))
     }
 }
-fn build_cfg_from_base_and_delta(base_cfg: Value, delta: Value) -> Value {
+pub fn build_cfg_from_base_and_delta(base_cfg: Value, delta: Value) -> Value {
     match (base_cfg, delta) {
         (Value::Object(mut base_obj), Value::Object(mut delta_obj)) => {
             for (k, v) in base_obj.iter_mut() {
@@ -462,6 +432,7 @@ mod test_delta {
 
 #[cfg(test)]
 mod db_tests {
+
     use super::*;
     use serde_json::json;
     fn mock_db() -> Store {
@@ -480,7 +451,7 @@ mod db_tests {
         let s = mock_db();
         let json = serde_json::json!({"test": 200});
         s.add_base_config("Test".to_owned(), json.clone()).unwrap();
-        let cfg = s.get_base_config("Test", None).unwrap();
+        let cfg = s.get_base_config("Test", None).unwrap().unwrap();
         assert_eq!(cfg, json)
     }
     #[test]
@@ -494,6 +465,16 @@ mod db_tests {
             id = i;
         }
         assert_eq!(c, id);
+    }
+    #[test]
+    fn test_read_latest() {
+        let s = mock_db();
+        let json = serde_json::json!({format!("test"): 200});
+        s.add_base_config("test".to_owned(), json.clone()).unwrap();
+        let json2 = serde_json::json!({format!("test"): 200, format!("Test"): 200});
+        s.add_base_config("test".to_owned(), json2.clone()).unwrap();
+        let c = s.get_latest_config("test", None).unwrap().unwrap();
+        assert_eq!(c, json2);
     }
     #[test]
     fn test_insert_read() {

@@ -1,0 +1,14 @@
+post:
+  title: "YAML: A Beginner's Guide"
+  author: bang with
+  date: 2024-06-20
+  tags:
+    - programming
+    - data formats
+  content: |
+    YAML is a human-readable data serialization format...
+  comments:
+    - user: user123
+      text: Great article!
+    - user: user456
+      text: Very helpful, thanks!
