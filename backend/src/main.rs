@@ -139,8 +139,8 @@ fn run(args: Cli, url: &str) -> anyhow::Result<()> {
                 false => {
                     for row in string_deltas {
                         println!("{}", row);
-                        return Ok(());
                     }
+                    return Ok(());
                 }
                 true => {
                     let mut t = delta_tui::tui::init()?;
